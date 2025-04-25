@@ -87,23 +87,7 @@ def main(file: Path) -> None:
                 break
 
     # ── overlay contour + bbox ────────────────────────────────────────
-    disp = cv2.cvtColor(filtered, cv2.COLOR_GRAY2BGR)
-    _, bin_inv = cv2.threshold(filtered, 127, 255, cv2.THRESH_BINARY_INV)
-    cnts, _ = cv2.findContours(bin_inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if cnts:
-        cv2.polylines(disp, cnts, True, (0,255,0), 2, cv2.LINE_AA)
-        x,y,w,h = cv2.boundingRect(cnts[0])
-        cv2.rectangle(disp, (x,y), (x+w, y+h), (255,255,0), 1)
-
-    msg = f"letter={letter or 'None'}  angle={angle}°"
-    cv2.putText(disp, msg, (10,25), cv2.FONT_HERSHEY_SIMPLEX,
-                0.7, (255,255,255), 2, cv2.LINE_AA)
-
     print("Detected:", letter or "None", f"(orientation {angle}°)" if letter else "")
-    cv2.imshow("OCR A/B/C detector – press any key", disp)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
