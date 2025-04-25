@@ -2,7 +2,7 @@ import cv2, numpy as np, sys, math
 from collections import deque
 
 # ----------------------------------------------------------------------
-VIDEO          = sys.argv[1] if len(sys.argv) > 1 else "test3.mp4"
+VIDEO          = sys.argv[1] if len(sys.argv) > 1 else "test1.mp4"
 
 FRAME_SIDE     = 320          # camera output is 320×320 px
 MIN_AREA_PCT   = 0.02         # glyph must cover ≥ 2 % of frame
@@ -16,61 +16,72 @@ STABLE_FRAMES  = 4            # debounce length
 # ----------------------------------------------------------------------
 
 def classify_letter(bgr):
-    # 1. keep dark pixels
+    """
+    Return (tag, poly):
+        tag  ∈ {'A','B','C'} or None
+        poly = 4×2 float32 array of glyph bounding box (or None)
+    """
+    # 1. dark-pixel mask
     g   = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    g   = cv2.GaussianBlur(g, (5,5), 0)                      # de-speckle
     _, bw = cv2.threshold(g, 0, 255,
                           cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    bw  = cv2.morphologyEx(bw, cv2.MORPH_OPEN, KERNEL, iterations=1)
+    bw  = cv2.morphologyEx(bw, cv2.MORPH_OPEN, KERNEL, 1)    # kill pinholes
 
     cnts, _ = cv2.findContours(bw, cv2.RETR_EXTERNAL,
                                cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
         return None, None
 
-    # 2. screen candidates
-    candidates = []
+    # 2. candidate screen
+    FRAME_PIX = bgr.shape[0] * bgr.shape[1]
+    MIN_AREA  = int(FRAME_PIX * 0.04)        # >= 4 % of frame
+    MAX_AREA  = int(FRAME_PIX * 0.35)        # <= 35 % of frame
+
+    cands = []
     for c in cnts:
         area = cv2.contourArea(c)
-        if area < MIN_AREA:
+        if area < MIN_AREA or area > MAX_AREA:
             continue
-
-        hull_area = cv2.contourArea(cv2.convexHull(c)) + 1e-8
-        if area / hull_area < MIN_SOLIDITY:
+        hull = cv2.convexHull(c)
+        if area / (cv2.contourArea(hull)+1e-8) < MIN_SOLIDITY:
             continue
-
-        (w, h) = cv2.minAreaRect(c)[1]
-        if min(w, h) == 0 or max(w, h) / min(w, h) > MAX_AR:
+        (w,h) = cv2.minAreaRect(c)[1]
+        if min(w,h)==0 or max(w,h)/min(w,h) > MAX_AR:
             continue
-
-        candidates.append((area, c))
-
-    if not candidates:
+        cands.append((area, c))
+    if not cands:
         return None, None
 
-    c = max(candidates, key=lambda t: t[0])[1]   # largest surviving blob
+    c   = max(cands, key=lambda t: t[0])[1]                  # biggest glyph
 
-    # 3. perspective-correct to fixed ROI
+    # 3. warp glyph to square ROI
     rect = cv2.minAreaRect(c)
     box  = cv2.boxPoints(rect).astype(np.float32)
-    dst  = np.float32([[0, 0],
-                       [ROI_SIZE - 1, 0],
-                       [ROI_SIZE - 1, ROI_SIZE - 1],
-                       [0, ROI_SIZE - 1]])
+    dst  = np.float32([[0,0],[ROI_SIZE-1,0],[ROI_SIZE-1,ROI_SIZE-1],[0,ROI_SIZE-1]])
     M    = cv2.getPerspectiveTransform(box, dst)
-    roi  = cv2.warpPerspective(bgr, M, (ROI_SIZE, ROI_SIZE))
+    roi  = cv2.warpPerspective(bgr, M, (ROI_SIZE,ROI_SIZE))
 
-    # 4. re-threshold & count holes
-    _, letter = cv2.threshold(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY),
-                              0, 255,
-                              cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # 4. re-threshold, close gaps, count *significant* holes
+    _, lmask = cv2.threshold(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY),
+                             0,255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+    lmask = cv2.morphologyEx(lmask, cv2.MORPH_CLOSE, KERNEL, 1)
 
-    cnts, hier = cv2.findContours(letter, cv2.RETR_CCOMP,
+    cnts, hier = cv2.findContours(lmask, cv2.RETR_CCOMP,
                                   cv2.CHAIN_APPROX_SIMPLE)
     if hier is None:
         return None, box
 
-    holes = sum(1 for h in hier[0] if h[3] != -1)
-    tag   = 'A' if holes == 1 else 'B' if holes >= 2 else 'C'
+    glyph_area = lmask.sum() / 255.0
+    HOLE_MIN   = glyph_area * 0.02          # ignore holes < 2 % of glyph
+
+    holes = 0
+    for i,h in enumerate(hier[0]):
+        if h[3] != -1:                      # child contour = hole
+            if cv2.contourArea(cnts[i]) >= HOLE_MIN:
+                holes += 1
+
+    tag = 'A' if holes == 1 else 'B' if holes >= 2 else 'C'
     return tag, box.astype(int)
 
 
