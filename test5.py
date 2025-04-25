@@ -6,10 +6,36 @@ import cv2, numpy as np, pytesseract, sys
 from pathlib import Path
 
 WHITELIST   = "ABC"
-ANGLE_STEP  = 15                                                                 # degrees between successive trials
+ANGLE_STEP  = 1                                                                 # degrees between successive trials
 MIN_AREA    = 500                                                               # px² discard smaller blobs
 KERNEL      = np.ones((3,3), np.uint8)                                          # morphological kernel
 TESS_CFG    = (f"-c tessedit_char_whitelist={WHITELIST} --oem 3 --psm 10")      # tesseract config / single char
+
+def prep_for_ocr(bin_img: np.ndarray, target_h: int = 120) -> np.ndarray:
+    """
+    bin_img   : uint8, glyph=0, bg=255   (output of filter_letter / rotate)
+    returns   : resized uint8 image ready for pytesseract
+    """
+    # 1. tight crop around the glyph
+    ys, xs = np.where(bin_img < 128)
+    if ys.size == 0:                          # nothing left (shouldn't happen)
+        return bin_img.copy()
+    y0, y1 = ys.min(), ys.max() + 1
+    x0, x1 = xs.min(), xs.max() + 1
+    roi = bin_img[y0:y1, x0:x1]
+
+    # 2. constant white border (so glyph is not glued to the frame)
+    roi = cv2.copyMakeBorder(roi, 10, 10, 10, 10,
+                             cv2.BORDER_CONSTANT, value=255)
+
+    # 3. scale so height ≈ target_h (keep aspect ratio)
+    h, w = roi.shape
+    if h != target_h:
+        new_w = int(w * (target_h / h))
+        roi   = cv2.resize(roi, (new_w, target_h),
+                           interpolation=cv2.INTER_NEAREST)
+    return roi
+
 
 def filter_letter(src_bgr: np.ndarray) -> np.ndarray:
     """
@@ -33,7 +59,9 @@ def filter_letter(src_bgr: np.ndarray) -> np.ndarray:
     return 255 - mask # black glyph, white background
 
 def ocr_letter(img_gray: np.ndarray) -> str | None:
-    txt = pytesseract.image_to_string(img_gray, config=TESS_CFG).strip().upper()
+    ready = prep_for_ocr(img_gray)         # <-- NEW
+    txt   = pytesseract.image_to_string(ready, config=TESS_CFG)
+    txt   = txt.strip().upper()
     return txt[0] if txt and txt[0] in WHITELIST else None
 
 def rotate(img: np.ndarray, angle: int) -> np.ndarray:
