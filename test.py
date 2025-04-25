@@ -1,6 +1,6 @@
 import cv2, numpy as np, sys, math
 
-VIDEO = sys.argv[1] if len(sys.argv) > 1 else "test.mp4"
+VIDEO = sys.argv[1] if len(sys.argv) > 1 else "test1.mp4"
 
 WHITE_LO        = (0, 0, 200)     # HSV lower/upper for the white disk
 WHITE_HI        = (180, 30, 255)
