@@ -2,7 +2,7 @@ import cv2, numpy as np, sys, math
 from collections import deque
 
 # ----------------------------------------------------------------------
-VIDEO          = sys.argv[1] if len(sys.argv) > 1 else "test1.mp4"
+VIDEO          = sys.argv[1] if len(sys.argv) > 1 else "test4.mp4"
 
 FRAME_SIDE     = 320          # camera output is 320×320 px
 MIN_AREA_PCT   = 0.02         # glyph must cover ≥ 2 % of frame
