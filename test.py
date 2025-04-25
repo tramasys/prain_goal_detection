@@ -12,7 +12,7 @@ import cv2, numpy as np, sys, math
 from collections import deque
 
 # ----------------------------------------------------------------------
-VIDEO          = sys.argv[1] if len(sys.argv) > 1 else "test1.mp4"
+VIDEO          = sys.argv[1] if len(sys.argv) > 1 else "test3.mp4"
 
 FRAME_SIDE     = 320          # camera output is 320×320 px
 MIN_AREA_PCT   = 0.02         # glyph must cover ≥ 2 % of frame
@@ -92,6 +92,10 @@ if not cap.isOpened():
 history = deque(maxlen=STABLE_FRAMES)
 font = cv2.FONT_HERSHEY_SIMPLEX
 
+fps          = cap.get(cv2.CAP_PROP_FPS) or 30      # fallback if header missing
+SLOW_FACTOR  = 2.0                                  # 2 × slower than real time
+delay_ms     = int(1000 / fps * SLOW_FACTOR)
+
 while True:
     ok, frame = cap.read()
     if not ok:
@@ -109,7 +113,7 @@ while True:
                     1.2, (0, 255, 0), 2, cv2.LINE_AA)
 
     cv2.imshow("A/B/C detection (press q to quit)", frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(delay_ms) & 0xFF == ord('q'):
         break
 
 cap.release()
