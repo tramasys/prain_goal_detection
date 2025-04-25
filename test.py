@@ -93,7 +93,7 @@ history = deque(maxlen=STABLE_FRAMES)
 font = cv2.FONT_HERSHEY_SIMPLEX
 
 fps          = cap.get(cv2.CAP_PROP_FPS) or 30      # fallback if header missing
-SLOW_FACTOR  = 2.0                                  # 2 × slower than real time
+SLOW_FACTOR  = 1.0                                 # 1 × slower than real time
 delay_ms     = int(1000 / fps * SLOW_FACTOR)
 
 while True:
